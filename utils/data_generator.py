@@ -8,7 +8,7 @@ import shutil
 from utils import image_to_array, load_image, download_data
 from utils.face_detection import crop_face, get_face_keypoints_detecting_function
 from mask_utils.mask_utils import mask_image
-
+from multiprocessing import Process
 
 class DataGenerator:
     def __init__(self, configuration):
@@ -63,6 +63,18 @@ class DataGenerator:
 
         return image_files
 
+    def get_files_faces_multicore(self, core="1"):
+        """Get path of all images in dataset"""
+        image_files = []
+        for dirpath, dirs, files in os.walk(self.path_to_data+core):
+            for filename in files:
+                fname = os.path.join(dirpath, filename)
+                if fname.endswith(self.valid_image_extensions):
+                    image_files.append(fname)
+
+        return image_files    
+
+
     def generate_images(self, image_size=None, test_image_count=None, train_image_count=None):
         """Generate test and train data (images with and without the mask)"""
         if image_size is None:
@@ -91,7 +103,42 @@ class DataGenerator:
                            image_size=image_size,
                            save_to=self.train_data_path)
 
-    def generate_data(self, number_of_images, image_size=None, save_to=None):
+    def generate_images_multicore(self, image_size=None, test_image_count=None, train_image_count=None, core="1"):
+        """Generate test and train data (images with and without the mask)"""
+        if image_size is None:
+            image_size = self.configuration.get('image_size')
+        if test_image_count is None:
+            test_image_count = self.test_image_count
+        if train_image_count is None:
+            train_image_count = self.train_image_count
+
+        if not os.path.exists(self.train_data_path+core):
+            os.mkdir(self.train_data_path+core)
+            os.mkdir(os.path.join(self.train_data_path+core, 'inputs'))
+            os.mkdir(os.path.join(self.train_data_path+core, 'outputs'))
+
+        if not os.path.exists(self.test_data_path+core):
+            os.mkdir(self.test_data_path+core)
+            os.mkdir(os.path.join(self.test_data_path+core, 'inputs'))
+            os.mkdir(os.path.join(self.test_data_path+core, 'outputs'))
+
+        # train_data_paths_tmp = [self.train_data_path + str(i) for i in range(threads)] 
+        # test_data_paths_tmp = [self.test_data_path + str(i) for i in range(threads)]
+
+        # for path in train_data_paths_tmp:
+
+        print('Generating testing data')
+        self.generate_data(test_image_count,
+                           image_size=image_size,
+                           save_to=self.test_data_path+core,
+                           core=core)
+        print('Generating training data')
+        self.generate_data(train_image_count,
+                           image_size=image_size,
+                           save_to=self.train_data_path+core,
+                           core=core)
+
+    def generate_data(self, number_of_images, image_size=None, save_to=None, core="1"):
         """ Add masks on `number_of_images` images
             if save_to is valid path to folder images are saved there otherwise generated data are just returned in list
         """
@@ -101,7 +148,7 @@ class DataGenerator:
         if image_size is None:
             image_size = self.configuration.get('image_size')
 
-        for i, file in tqdm(enumerate(random.sample(self.get_files_faces(), number_of_images)), total=number_of_images):
+        for i, file in tqdm(enumerate(random.sample(self.get_files_faces_multicore(core=core), number_of_images)), total=number_of_images):
             # Load images
             image = load_image(file)
 
